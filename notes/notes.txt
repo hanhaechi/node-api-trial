@@ -1,0 +1,161 @@
+LINK:
+https://medium.freecodecamp.org/building-a-simple-node-js-api-in-under-30-minutes-a07ea9e390d2
+
+QUESTIONS:
+What is Express and it's instance?
+Step 10- why am I importing all files from app/routes (server.js) with require('./app/routes')(app, {});
+Step 12 - what does app.use(bodyParser.urlencoded({ extended: true })); do?
+Step 15 - why am I connecting to db first and then saying listen for actions?
+How to understand who's responsible for what and action flow? 
+
+1. You’re going to use Express as your framework, MongoDB as the database, and a package called body-parser to help deal with JSON requests. 
+_ install node and npm.
+_ create new folder 'notable' (mkdir notable)
+_ run "npm init" command from that folder 
+_ run "npm install --save express mongodb@2.2.16 body-parser"
+
+2. I also highly recommend installing Nodemon as a dev dependency. It’s a simple little package that automatically restarts your server when files change.
+run "npm install --save-dev nodemon"
+Then add the following line to package.json file: 
+        "scripts": {
+            "dev": "nodemon server.js"
+        },
+
+3. Start by requiring all my dependencies in server.js. You’re going to use the MongoClient to interact with your database. Note that you also initialize your app as an instance of Express, your framework. 
+        const express        = require('express');
+        const MongoClient    = require('mongodb').MongoClient;
+        const bodyParser     = require('body-parser');
+        const app            = express();
+
+4. The last thing you need to do to get your server up and running is to create port (const port = 8000;) and tell your app to start listening for HTTP requests:
+        app.listen(port, () => {
+            console.log(`We are live on ${port}`); // ES6 syntax
+        });
+
+5. Now if you run "npm run dev" or "node server.js" if you didn’t install Nodemon - you should see ‘We are live on port 8000’ in the terminal.
+
+6. Install Postman - It allows you to make simple HTTP requests with custom bodies and parameters.
+
+7. Most apps put all their routes in one big routes.js file. Splitting up your files into separate folders leads to good readability, and makes big apps more manageable. In root create folder app > folder routes > files index.js and note_routes.js.
+
+8. In Express, routes are wrapped in a function, which takes the Express instance (app, in our case) and a database as arguments. Thus in root/app/routes/note_routes.js:
+        module.exports = function(app, db) {
+        };
+
+9. You can then export this function through your root/app/routes/index.js:
+        const noteRoutes = require('./note_routes');
+        module.exports = function(app, db) {
+            noteRoutes(app, db);
+            // Other route groups could go here, in the future
+        };
+
+10. Then import it for use in server.js (after port declaration line, before app.listen function):
+        require('./app/routes')(app, {});
+Since you don’t have a database yet set up, you’re just passing in an empty object.
+
+11. Now make CREATE route in note_routes.js:
+        module.exports = function(app, db) {
+            app.post('/notes', (req,res) => {
+                res.send("Hello")
+            });
+        };
+When the app receives a POST request to the ‘/notes’ path, it will execute the code inside the callback- passing in a request object (which contains the parameters or JSON of the request) and a response object (used to reply). You can test this by using Postman to send a POST request to localhost:8000/notes
+
+12. In Postman, go to the Body tab and add some key-value pairs (like title, body and their values), after selecting the x-www-form-urlencoded radio button. In note_routes.js before res.send line add console.log(req.body); Try SEND with Postman and it will return "undefined" in terminal's console. It's because Express can’t process URL encoded forms on its own. Thus, in server.js add:
+        app.use(bodyParser.urlencoded({ extended: true }));
+
+13. Last step to your preliminary route: set up the database, and then add your data in.Create account at mLab, add a user with username and password, grab URL "to connect using a driver via the standard MongoDB URI"
+
+14. Create directory config in the root of your project, and create a db.js file. In db.js, add the following:
+        module.exports = {
+            url : "mongodb://modestan:slaptaz0dis@ds263380.mlab.com:63380/mod-notable"
+        };
+If you’re committing this project to Github, be sure to include a .gitignore file like so, so you don’t share your password with everyone.)
+
+15. Add db require in server.js (const db = require('./config.db.js');)
+and the following code: 
+        MongoClient.connect(db.url, (err, database) => {
+            if (err) return console.log(err)
+            require('./app/routes')(app, database);
+
+            app.listen(port, () => {
+                console.log('We are live on ' + port);
+            });               
+        })
+Important: we moved require inside this function as well as app.listen part.
+
+16. Create collection 'notes' in my db 'mod-notable'. Creating a note is calling an insert method on my collection in note_routes.js. Once the insert is complete (or has failed for whatever reason), you want to either send back an error or send back the newly created note object:
+        const note = { 
+            text: req.body.body, 
+            title: req.body.title, 
+            author: req.body.author
+        }
+        db.collection('notes).insert(note, (err, results) => {
+            if (err) {
+                res.send({ 'error' : 'An error has occured" });
+            } else {
+                res.send(result.ops[0]);
+            }
+        });
+17. Create READ route: Say you wanted to get back the note you just created, by navigating to localhost:8000/notes/{the id}. MongoDB requires not just an ID as a string, but as an ID object or, as they call it, an ObjectID, thus before module.exports in note_routes.js add:
+    var ObjectID = require('mongodb').ObjectID;
+and under app.get define the following: 
+        const id = req.params.id;
+        const details = {
+            '_id': new ObjectID(id)
+        };
+
+18. Add the READ code block under module.exports:
+        app.get('/notes/:id', (req, res) => {
+            const details = {
+                '_id': new ObjectID(id)
+            };
+
+            db.collection('notes').findOne(details, (err, item) => {
+                if (err) {
+                    res.send({'error': 'An error has occured'});
+                } else {
+                    res.send(item);
+                }
+            });
+        });
+
+19. Implement DELETE
+        app.delete('/notes/:id', (req,res) => {
+            const id = req.params.id;
+            const details = {
+                '_id': new ObjectID(id)
+            };
+
+            db.collection('notes').remove(details, (err,item) => {
+                if (err) {
+                    res.send({'error': 'An error has occured'});
+                } else {
+                    res.send(`Note with ID of ${id} has been deleted`);
+                }
+            });
+        });
+
+20. Implement UPDATE
+        app.put('/notes/:id', (req,res) => {
+            const id = req.params.id;
+            const details = {
+                '_id': new ObjectID(id)
+            };
+            const note = { 
+                text: req.body.body, 
+                title: req.body.title, 
+                author: req.body.author
+            };
+            
+            db.collection('notes').update(details, note, (err, result) => {
+                if (err) {
+                    res.send({'error': 'An error has occured'});
+                } else {
+                    res.send(note);
+                }
+            });
+        });
+Note the imperfection with this code- if you fail to supply a body or title, the PUT request will nullify those fields on the note in the database. You could easily add some conditional logic to update the fields only if they’re present in the request- I left that out just to keep it simple.
+
+
